@@ -1,0 +1,265 @@
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+using Photon.Pun;
+using UnityEngine.UI;
+
+public class PlayerControls : MonoBehaviour
+{
+    public float rotateSpeed;
+    public float jumpSpeed;
+
+    public Text healthText;
+    public Text healthText2;
+
+
+    public float jumpHspeed;
+    public float jumpdelay;
+    private bool ground;
+    private bool falling;
+    private bool hit;
+    public bool disconnect;
+    private float health = 100;
+    private float minHealth = 0;
+    private float MaxHealth = 100;
+
+    private CharacterController characterController;
+    private Animator animator;
+    public Camera cam;
+    private PhotonView myPhotonView;
+
+
+    private bool jumping;
+    private float stepoffset;
+    private float? lastGroundedTime;
+    private float? jumpButtonTime;
+    public float ySpeed;
+
+
+    // Start is called before the first frame update
+    void Start()
+    {
+        Debug.Log("in player controls1");
+        //cam = Camera.main;
+        animator = GetComponent<Animator>();
+        characterController = GetComponent<CharacterController>();
+
+        hit = false;
+        myPhotonView = GetComponent<PhotonView>();
+        if (!myPhotonView.IsMine)
+        {
+            Debug.Log("is not my cam");
+            //Destroy(cam);
+            cam.enabled = false;
+        }
+        else
+        {
+            Debug.Log("is my cam");
+            GameObject[] DBballs = GameObject.FindGameObjectsWithTag("ball");
+            foreach(GameObject ball in DBballs)
+                ball.GetComponent<PickupControls>().enabled = true;
+        }
+
+        healthText = GameObject.Find("ScoreText").GetComponent<Text>();
+        //healthText2 = GameObject.Find("OnPlayerText").GetComponent<Text>();
+    }
+
+    // Update is called once per frame
+    void Update()
+    {
+        healthText2.text = health.ToString();
+        if (myPhotonView.IsMine)
+        {
+            healthText.text ="Health: "+ health.ToString();
+            
+            //get the horizontal input and vertical input
+            float horizontalInput = Input.GetAxis("Horizontal");
+            float verticalInput = Input.GetAxis("Vertical");
+
+            //allow the players to be move in the horizontal input and vertical but in up and down
+            Vector3 moveDirection = new Vector3(horizontalInput, 0, verticalInput);
+
+            //clamp for animation
+            float inputMagnitude = Mathf.Clamp01(moveDirection.magnitude) / 2;
+
+            if (Input.GetKey(KeyCode.LeftShift))
+            {
+                inputMagnitude *= 2;
+            }
+            animator.SetFloat("speed", inputMagnitude, 0.25f, Time.deltaTime);
+            moveDirection.Normalize();
+
+            ySpeed += Physics.gravity.y * Time.deltaTime;
+
+            if (characterController.isGrounded)
+            {
+                lastGroundedTime = Time.time;
+            }
+
+            if (Input.GetButtonDown("Jump"))
+            {
+                jumpButtonTime = Time.time;
+            }
+
+            if (Time.time - lastGroundedTime <= jumpdelay)
+            {
+                characterController.stepOffset = stepoffset;
+                ySpeed = -0.5f;
+                animator.SetBool("isGrounded", true);
+                ground = true;
+                animator.SetBool("jump", false);
+                jumping = false;
+                animator.SetBool("falling", false);
+                falling = false;
+
+                if (Time.time - jumpButtonTime <= jumpdelay)
+                {
+                    ySpeed = jumpSpeed;
+                    animator.SetBool("jump", true);
+                    jumping = true;
+                    jumpButtonTime = null;
+                    lastGroundedTime = null;
+                }
+            }
+            else
+            {
+                characterController.stepOffset = 0;
+                animator.SetBool("isGrounded", false);
+                ground = false;
+                if ((jumping && ySpeed < 0) || ySpeed < -2)
+                {
+                    animator.SetBool("falling", true);
+                }
+            }
+
+            if (moveDirection != Vector3.zero)
+            {
+                animator.SetBool("isMoving", true);
+
+                moveDirection = transform.TransformDirection(moveDirection);
+            }
+            else
+            {
+                animator.SetBool("isMoving", false);
+            }
+
+            if (ground == false)
+            {
+                Vector3 velocity = moveDirection * inputMagnitude * jumpHspeed;
+                velocity.y = ySpeed;
+
+                characterController.Move(velocity * Time.deltaTime);
+
+            }
+            if (Input.GetKeyDown(KeyCode.G))
+            {
+                health = 100;
+            }
+            if(health == minHealth)
+            {
+                GameObject.Find("GameSetup").GetComponent<GameSetup>().DisconnectPlayer(disconnect);
+            }
+            if (Input.GetKeyDown(KeyCode.M))
+            {
+                disconnect = true;
+                GameObject.Find("GameSetup").GetComponent<GameSetup>().DisconnectPlayer(disconnect);
+            }
+        }
+    }
+
+    private void OnAnimatorMove()
+    {
+            if (ground)
+            {
+                Vector3 velocity = animator.deltaPosition;
+                velocity.y = ySpeed * Time.deltaTime;
+
+                characterController.Move(velocity);
+            } 
+    }
+    /*
+    private void OnTriggerEnter(Collider other)
+    {
+        if (myPhotonView.IsMine)
+        {
+            string path = "mixamorig2:Hips/mixamorig2:Spine/mixamorig2:Spine1/mixamorig2:Spine2/mixamorig2:LeftShoulder/mixamorig2:LeftArm/mixamorig2:LeftForeArm/mixamorig2:LeftHand/ball pos/ball";
+            if (gameObject.transform.Find(path).GetComponent<GameObject>() != null && other.CompareTag("ball"))
+            {
+                GameObject ball = gameObject.transform.Find(path).GetComponent<GameObject>();
+                int IdOfequipBall = ball.GetComponent<PhotonView>().ViewID;
+                Debug.Log("id of eqipped ball " + IdOfequipBall);
+                int IdOfOther = other.GetComponent<PhotonView>().ViewID;
+                Debug.Log("id of collided ball " + IdOfOther);
+                if (IdOfequipBall != IdOfOther)
+                {
+                    hit = true;
+
+                }
+                else
+                {
+                    Debug.Log("It your ball in your hand");
+                }
+            }
+            else
+            {
+                Debug.Log("hit when not eqipped");
+                hit = true;
+            }
+        }
+
+    }*/
+
+    public virtual void OnPhotonSerializeView(PhotonStream stream, PhotonMessageInfo info)
+    {
+        if (stream.IsWriting)
+        {
+            //mine(local the one that belongs to the cam)
+            stream.SendNext(health);
+
+        }
+        else if (stream.IsReading)
+        {
+            health = (float)stream.ReceiveNext();
+        }
+    }    
+    
+    
+    [PunRPC]
+    void Damage()
+    {
+        health -= 50;
+    }
+
+    [PunRPC]
+    void ExtraPoints()
+    {
+        health += 5;
+    }
+
+    public void OnTriggerEnter(Collider other)
+    {
+        //if (myPhotonView.IsMine)
+        //{
+            if (other.CompareTag("ball"))
+            {
+               
+                PhotonView parentBeforePV = other.GetComponent<PickupControls>().parentfrombefore;
+                if (parentBeforePV.ViewID == myPhotonView.ViewID)
+                    return;
+                myPhotonView.RPC("Damage", RpcTarget.AllBuffered);
+
+                /*
+                            * 
+                            * 
+                                                                   * 
+            //if (myPhotonView.IsMine)
+            //{
+            PhotonView parentBeforePV = other.GetComponent<PickupControls>().parentfrombefore;
+                if (parentBeforePV.ViewID != myPhotonView.ViewID)
+                    myPhotonView.RPC("Damage", RpcTarget.AllBuffered);
+            //}*/
+            }
+        //}
+    }
+
+}

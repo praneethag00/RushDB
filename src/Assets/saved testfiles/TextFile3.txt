@@ -1,0 +1,66 @@
+using Photon.Pun;
+using Photon.Realtime;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+public class Ownership : MonoBehaviourPun, IPunOwnershipCallbacks
+{
+    public static PhotonView PV;
+    public bool equipped;
+
+    private void Awake()
+    {
+        PhotonNetwork.AddCallbackTarget(this);
+    }
+
+    private void onDestory()
+    {
+        PhotonNetwork.RemoveCallbackTarget(this);
+    }
+
+    public void OnOwnershipRequest(PhotonView targetView, Player requestingPlayer)
+    {
+
+        base.photonView.TransferOwnership(requestingPlayer);
+
+
+    }
+
+    public void OnOwnershipTransfered(PhotonView targetView, Player previousOwner)
+    {
+
+    }
+
+    public void OnOwnershipTransferFailed(PhotonView targetView, Player senderOfFailedRequest)
+    {
+        Debug.LogError("Object transferFailed");
+    }
+
+    public void Start()
+    {
+        PV = this.GetComponent<PhotonView>();
+    }
+
+    private void Update()
+    {
+        //bool inRange = this.GetComponent<PickupControls>().isInRange;
+        equipped = this.GetComponent<PickupControls>().equipped;
+        GameObject[] players = GameObject.FindGameObjectsWithTag("Player");
+        
+            foreach (GameObject player in players)
+            {
+                Transform playerTransform = player.GetComponent<Transform>();
+                Vector3 distanceToPlayer = playerTransform.position - transform.position;
+                if (distanceToPlayer.magnitude <= 1 && !equipped)
+                {
+                    if (Input.GetKeyDown(KeyCode.E) && !equipped)
+                        base.photonView.RequestOwnership();
+                }
+
+
+            }
+        //Vector3 distanceToPlayer = player.position - transform.position;
+    }
+
+}
